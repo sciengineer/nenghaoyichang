@@ -12,7 +12,8 @@ import csv
 from retry import retry
 import threading
 # from gevent import monkey, sleep
-# monkey.patch_all()
+# monkey.pat
+# h_all()
 from geventwebsocket.handler import WebSocketHandler
 
 logging.getLogger('fbprophet').setLevel(logging.ERROR)
