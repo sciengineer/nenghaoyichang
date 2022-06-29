@@ -18,7 +18,7 @@ from geventwebsocket.handler import WebSocketHandler
 logging.getLogger('fbprophet').setLevel(logging.ERROR)
 
 df = pd.DataFrame(
-    columns=['floor_id', 'datetime', 'power_consumption', 'power_consumption_ori', 'predict_value', 'yhat_lower','yhat_upper','error', 'flag'])
+    columns=['floor_id', 'datetime', 'power_consumption', 'power_consumption_ori', 'predict_value', 'error', 'flag'])
 dict_of_list = {}
 
 
@@ -36,7 +36,7 @@ path_df_120 =  make_multi_dirs('df_120')
 path_y_meadian_log =  make_multi_dirs('y_meadian_log')
 path_log =  make_multi_dirs('log')
 path_num =  make_multi_dirs('num')
-path_predict =  make_multi_dirs('predict')
+path_predict_value =  make_multi_dirs('predict_value')
 path_anomaly_detection = make_multi_dirs('anomaly_detection')
 
 
@@ -47,20 +47,17 @@ def run_Prophet(floor_id):
     df.reset_index(drop=True)
     df = df.rename(columns={"power_consumption": "y", "datetime": "ds"})
 
-    m = Prophet(weekly_seasonality=True)
+    m = Prophet()
     m.fit(df)
 
     # 预测的数据
     predict_hours = 1
     future = m.make_future_dataframe(periods=predict_hours, freq="1h")
     forecast = m.predict(future)
-    predict_value = forecast.yhat[-predict_hours:].values[0]
-    yhat_lower = forecast.yhat_lower[-predict_hours:].values[0]
-    yhat_upper = forecast.yhat_upper[-predict_hours:].values[0]
-    predict = (predict_value,yhat_lower,yhat_upper)
+    predict_value = str(forecast.yhat[-predict_hours:].values[0])
     # print('predict_value:',predict_value)
     df.to_json(os.path.join(path_df_json,'df' + str(floor_id) + '.json'), orient='index', date_format="epoch", date_unit="s")
-    return predict
+    return predict_value
 
 
 # 检测能耗是否异常，有异常值的话，需要用预测值替代后加入训练数据中
@@ -76,16 +73,16 @@ def anomaly_detection(floor_id):
     # 获取一个小时的实际能耗数据
     list = insert(floor_id)
     real_value = float(list[2])
-    list = np.array(list).reshape(1, 9)
+    list = np.array(list).reshape(1, 7)
     df_real = pd.DataFrame(list,
                            columns=['floor_id', 'datetime', 'power_consumption', 'power_consumption_ori',
-                                    'predict_value','yhat_lower','yhat_upper', 'error',
+                                    'predict_value', 'error',
                                     'flag'])
     df_real = df_real.rename(columns={"power_consumption": "y", "datetime": "ds"})
     with open(os.path.join(path_df_json,'df' + str(floor_id) + '.json'), 'r+') as json_file:
         df = pd.read_json(json_file, orient='index', date_unit="s")
-    with open(os.path.join(path_predict,'predict' + str(floor_id) + '.txt'), 'r+') as f_predict:
-        predict_value,yhat_lower,yhat_upper = tuple(eval(f_predict.read()))
+    with open(os.path.join(path_predict_value,'predict_value' + str(floor_id) + '.txt'), 'r+') as f_predict:
+        predict_value = float(f_predict.read())
     error = mean_absolute_percentage_error(real_value, predict_value)
 
     # timestamp = df_real.iloc[0].ds
@@ -99,65 +96,30 @@ def anomaly_detection(floor_id):
 
     df = pd.concat([df.iloc[1:], df_real.iloc[:1]], axis=0)
     df = df.reset_index(drop=True)
-    error = '{:.2f}'.format(error)
-    predict_value_str = '{:.2f}'.format(predict_value)
-    yhat_lower_str = '{:.2f}'.format(yhat_lower)
-    yhat_upper_str = '{:.2f}'.format(yhat_upper)
-    flag = 0
-    # if error > 30:
-    #     flag = 'True'
-    #     error = '{:.2f}'.format(error)
-    #     predict_value_str = '{:.2f}'.format(predict_value)
-    #     print('Warning！{0}节点能耗异常：{1}的用电量真实值{2}与模型预测值{3}的偏差为{4}%，使用预测值作为训练数据'.format(floor_id, df_real.iloc[0].ds,
-    #                                                                                 df_real.iloc[0].y,
-    #                                                                                 predict_value_str, error))
-    #
-    #     df.iat[-1, 2] = predict_value
-    # else:
-    #     error = '{:.2f}'.format(error)
-    #     predict_value_str = '{:.2f}'.format(predict_value)
-    #     print('{0}节点{1}的用电量真实值{2}与模型预测值{3}的偏差为{4}%,能耗正常。'.format(floor_id, df_real.iloc[0].ds, df_real.iloc[0].y,
-    #                                                              predict_value_str,
-    #                                                              error))
-    if yhat_lower <= real_value <= yhat_upper:
-        print('{0}的用电量真实值{1}与模型预测值{2}的偏差为{3}%,在预测值低限{4}和高限{5}之间，能耗正常。'.format(df_real.iloc[0].ds, df_real.iloc[0].y,
-                                                                              predict_value_str, error, yhat_lower_str,
-                                                                              yhat_upper_str))
+    flag = 'False'
+    if error > 30:
+        flag = 'True'
+        error = '{:.2f}'.format(error)
+        predict_value_str = '{:.2f}'.format(predict_value)
+        print('Warning！{0}节点能耗异常：{1}的用电量真实值{2}与模型预测值{3}的偏差为{4}%，使用预测值作为训练数据'.format(floor_id, df_real.iloc[0].ds,
+                                                                                    df_real.iloc[0].y,
+                                                                                    predict_value_str, error))
 
-    elif real_value <= yhat_lower:
-        flag = 1
-
-        print('Warning！能耗低异常：{0}的用电量真实值{1}与模型预测值{2}的偏差为{3}%，低于预测值低限{4}。'.format(df_real.iloc[0].ds, df_real.iloc[0].y,
-                                                                                predict_value_str, error,
-                                                                                yhat_lower_str))
-        if real_value <= 0.5 * yhat_lower:
-            print(df.iat[-1, 2])
-
-            df.iat[-1, 2] = predict_value
-            print(df.iat[-1, 2])
-            print(predict_value)
+        df.iat[-1, 2] = predict_value
     else:
-
-
-        print('Warning！能耗高异常：{0}的用电量真实值{1}与模型预测值{2}的偏差为{3}%,高于预测值高限{4}。'.format(df_real.iloc[0].ds, df_real.iloc[0].y,
-                                                                                predict_value_str, error,
-                                                                                yhat_upper_str))
-        if real_value >= 2 * yhat_upper:
-            print(df.iat[-1, 2])
-
-            df.iat[-1, 2] = predict_value
-            print(df.iat[-1, 2])
-            print(predict_value)
+        error = '{:.2f}'.format(error)
+        predict_value_str = '{:.2f}'.format(predict_value)
+        print('{0}节点{1}的用电量真实值{2}与模型预测值{3}的偏差为{4}%,能耗正常。'.format(floor_id, df_real.iloc[0].ds, df_real.iloc[0].y,
+                                                                 predict_value_str,
+                                                                 error))
 
     df = df.reset_index(drop=True)
     df.iat[-1, 4] = predict_value
-    df.iat[-1, 5] = yhat_lower
-    df.iat[-1, 6] = yhat_upper
-    df.iat[-1, 7] = error
-    df.iat[-1, 8] = flag
+    df.iat[-1, 5] = error
+    df.iat[-1, 6] = flag
     df.to_json(os.path.join(path_df_json,'df' + str(floor_id) + '.json'), orient='index', date_format="epoch", date_unit="s")
     dict = {'floor_id': df.iat[-1, 0], 'datetime': df.iat[-1, 1], 'power_consumption': df.iat[-1, 2],
-            'power_consumption_ori': df.iat[-1, 3], 'predict_value': predict_value,'yhat_lower':yhat_lower,'yhat_upper':yhat_upper,'error': error, 'flag': flag}
+            'power_consumption_ori': df.iat[-1, 3], 'predict_value': predict_value, 'error': error, 'flag': flag}
 
     # 在整点过15分前（对比+预测）时不小心打开csv查看结果后没有及时关闭csv，导致报错，程序停止执行。加上retry后可以多次重试，在5分钟左右关上即可。
     @retry( delay=1, backoff=2, max_delay=10, tries=30)
@@ -176,20 +138,20 @@ def init_data(floor_id):
     with open(os.path.join(path_df_json,'df' + str(floor_id) + '.json'), 'r+') as json_file:
         df = pd.read_json(json_file, orient='index', date_unit="s")
     # 按照prophet格式更改数据名称
-    df_2_weeks = df.rename(columns={"power_consumption": "y", "datetime": "ds"})
-    df_2_weeks['time'] = [pd.to_datetime(d).time() for d in df_2_weeks['ds']]
-    df_2_weeks.to_csv(os.path.join(path_df_240,'df_2_weeks'+str(floor_id)+'.csv'), mode='a', header=True)
-    # s_clock = datetime.now().hour
-    s_clock = 15
-    grouped = df_2_weeks.groupby("time")
+    df_240_hours = df.rename(columns={"power_consumption": "y", "datetime": "ds"})
+    df_240_hours['time'] = [pd.to_datetime(d).time() for d in df_240_hours['ds']]
+    df_240_hours.to_csv(os.path.join(path_df_240,'df_240_hours'+str(floor_id)+'.csv'), mode='a', header=True)
+    s_clock = datetime.now().hour
+    # s_clock = 0
+    grouped = df_240_hours.groupby("time")
     y_median = grouped['y'].agg('median')
 
     y_median_log = open(os.path.join(path_y_meadian_log, 'y_meadian_log' + str(floor_id) + '.txt'), mode='a', encoding='utf-8')
 
     print('y_median:',y_median,file=y_median_log)
     y_median_log.close()
-    df_1_weeks = df_2_weeks[-7*24:]
-    df_1_weeks = df_1_weeks.reset_index(drop=True)
+    df_120_hours = df_240_hours[-120:]
+    df_120_hours = df_120_hours.reset_index(drop=True)
 
     # 判断120小时内的某小时用电量明显异常的数值，替换为10天中该小时的用电量的中位数（超过30%，粗略判定为异常值）
     def is_abnormal(y, x):
@@ -198,24 +160,24 @@ def init_data(floor_id):
         else:
             return abs(y - x) / max(x, y) > 0.3
     log = open(os.path.join(path_log,'log'+str(floor_id)+'.txt'),mode='a',encoding='utf-8')
-    for i in range(7*24):
-        if is_abnormal(float(df_1_weeks.iloc[i]['y']), y_median[(s_clock + i) % 24]):
-            print('{0}节点{1}的用电量{2}需要更新为中位值：{3}'.format(floor_id, df_1_weeks.iloc[i]['ds'], df_1_weeks.iloc[i]['y'],
+    for i in range(120):
+        if is_abnormal(float(df_120_hours.iloc[i]['y']), y_median[(s_clock + i) % 24]):
+            print('{0}节点{1}的用电量{2}需要更新为中位值：{3}'.format(floor_id, df_120_hours.iloc[i]['ds'], df_120_hours.iloc[i]['y'],
                                                        y_median[(s_clock + i) % 24]),file=log)
-            df_1_weeks.iat[i, 2] = y_median[(s_clock + i) % 24]
+            df_120_hours.iat[i, 2] = y_median[(s_clock + i) % 24]
     log.close()
-    df_1_weeks.drop('time', axis=1, inplace=True)
-    df = df_1_weeks.copy()
-    df.to_csv(os.path.join(path_df_120,'df_1_weeks'+str(floor_id)+'.csv'), mode='a', header=True)
+    df_120_hours.drop('time', axis=1, inplace=True)
+    df = df_120_hours.copy()
+    df.to_csv(os.path.join(path_df_120,'df_120_hours'+str(floor_id)+'.csv'), mode='a', header=True)
     # with open('test.csv', 'a') as f:
     #     for key in dict.keys():
     #         f.write("%s,%s\n" % (key, dict[key]))
 
     df.to_json(os.path.join(path_df_json,'df' + str(floor_id) + '.json'), orient='index', date_format="epoch", date_unit="s")
-    predict = run_Prophet(floor_id)
+    dict = run_Prophet(floor_id)
 
 
-    return predict
+    return dict
 
 
 def insert(floor_id):
@@ -228,7 +190,7 @@ def insert(floor_id):
     list_1.append(li[0]['datetime'])
     list_1.append(li[0]['power_consumption'])
     list_1.append(li[0]['power_consumption'])
-    None_tuple = (None,) * 5
+    None_tuple = (None,) * 3
     list_1.extend(None_tuple)
 
     return list_1
@@ -250,7 +212,7 @@ def one_hour_date(floor_id):
         with open(os.path.join(path_num,'num' + str(floor_id) + '.txt'), 'w') as f_out:
             f_out.write("1")
             a = 1
-    if a < 2*7*24:
+    if a < 240:
         # logging.info("You can see me now...")
         if floor_id not in dict_of_list:
             dict_of_list[floor_id] = []
@@ -261,31 +223,30 @@ def one_hour_date(floor_id):
             f_out.write(str(num))
         return 'a'
 
-    elif a == 2*7*24:
+    elif a == 240:
         # 将外部调用这个api获取到的datetime和power_consumption传入li
         dict_of_list[floor_id].append(insert(floor_id))
         df = pd.DataFrame(dict_of_list[floor_id],
                           columns=['floor_id', 'datetime', 'power_consumption', 'power_consumption_ori',
-                                   'predict_value','yhat_lower','yhat_upper', 'error',
+                                   'predict_value', 'error',
                                    'flag'])
 
         df.to_json(os.path.join(path_df_json,'df' + str(floor_id) + '.json'), orient='index', date_format="epoch", date_unit="s")
-        predict = init_data(floor_id)
+        predict_value = init_data(floor_id)
         num = a + 1
         with open(os.path.join(path_num,'num' + str(floor_id) + '.txt'), 'w') as f_out:
             f_out.write(str(num))
-        with open(os.path.join(path_predict,'predict' + str(floor_id) + '.txt'), 'w+') as f_predict:
-
-            f_predict.write(str(predict))
-        return str(predict)
+        with open(os.path.join(path_predict_value,'predict_value' + str(floor_id) + '.txt'), 'w+') as f_predict:
+            f_predict.write(predict_value)
+        return predict_value
     else:
         dict = anomaly_detection(floor_id)
-        predict = run_Prophet(floor_id)
+        predict_value = run_Prophet(floor_id)
         num = a + 1
         with open(os.path.join(path_num, 'num' + str(floor_id) + '.txt'), 'w') as f_out:
             f_out.write(str(num))
-        with open(os.path.join(path_predict, 'predict' + str(floor_id) + '.txt'), 'w+') as f_predict:
-            f_predict.write(str(predict))
+        with open(os.path.join(path_predict_value, 'predict_value' + str(floor_id) + '.txt'), 'w+') as f_predict:
+            f_predict.write(predict_value)
         return dict
 
 # # run the application

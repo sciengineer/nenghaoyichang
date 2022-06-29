@@ -21,7 +21,7 @@ engine.execute(sql)
 
 
 # df = pd.read_csv("mianyang_id_1_power_consumption_5.1_5.23_hourly.csv", header=0)
-df = pd.read_excel("mianyang_aircon_6.xlsx", header=0)
+df = pd.read_excel("miangyang_aircon_June.xlsx", header=0)
 # df = df.reset_index()
 df = df.rename(columns={"timestamp":"datetime"})
 df.replace('--',0,inplace=True)
