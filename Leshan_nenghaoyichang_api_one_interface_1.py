@@ -31,8 +31,8 @@ def make_multi_dirs(sub_path):
     return path
 
 path_df_json = make_multi_dirs('df_json')
-path_df_240 =  make_multi_dirs('df_240')
-path_df_120 =  make_multi_dirs('df_120')
+path_df_2_weeks =  make_multi_dirs('df_2_weeks')
+path_df_1_weeks =  make_multi_dirs('df_1_weeks')
 path_y_meadian_log =  make_multi_dirs('y_meadian_log')
 path_log =  make_multi_dirs('log')
 path_num =  make_multi_dirs('num')
@@ -48,6 +48,7 @@ def run_Prophet(floor_id):
     df = df.rename(columns={"power_consumption": "y", "datetime": "ds"})
 
     m = Prophet(weekly_seasonality=True)
+    df.to_csv('df_training' + str(df.iloc[0].ds).replace(' ', '').replace(':',"")+ '.csv')
     m.fit(df)
 
     # 预测的数据
@@ -137,6 +138,7 @@ def anomaly_detection(floor_id):
             print(df.iat[-1, 2])
             print(predict_value)
     else:
+        flag = 2
 
 
         print('Warning！能耗高异常：{0}的用电量真实值{1}与模型预测值{2}的偏差为{3}%,高于预测值高限{4}。'.format(df_real.iloc[0].ds, df_real.iloc[0].y,
@@ -178,9 +180,9 @@ def init_data(floor_id):
     # 按照prophet格式更改数据名称
     df_2_weeks = df.rename(columns={"power_consumption": "y", "datetime": "ds"})
     df_2_weeks['time'] = [pd.to_datetime(d).time() for d in df_2_weeks['ds']]
-    df_2_weeks.to_csv(os.path.join(path_df_240,'df_2_weeks'+str(floor_id)+'.csv'), mode='a', header=True)
+    df_2_weeks.to_csv(os.path.join(path_df_2_weeks,'df_2_weeks'+str(floor_id)+'.csv'), mode='a', header=True)
     # s_clock = datetime.now().hour
-    s_clock = 15
+    s_clock = 16
     grouped = df_2_weeks.groupby("time")
     y_median = grouped['y'].agg('median')
 
@@ -206,7 +208,7 @@ def init_data(floor_id):
     log.close()
     df_1_weeks.drop('time', axis=1, inplace=True)
     df = df_1_weeks.copy()
-    df.to_csv(os.path.join(path_df_120,'df_1_weeks'+str(floor_id)+'.csv'), mode='a', header=True)
+    df.to_csv(os.path.join(path_df_1_weeks,'df_1_weeks'+str(floor_id)+'.csv'), mode='a', header=True)
     # with open('test.csv', 'a') as f:
     #     for key in dict.keys():
     #         f.write("%s,%s\n" % (key, dict[key]))

@@ -29,7 +29,7 @@ df.replace('--',0,inplace=True)
 df['id'] = 0
 
 print(df)
-df_use = df[(df.datetime>='2022-06-01 14:00')]
+df_use = df[(df.datetime>='2022-06-01 15:00')]
 # df_use = df.loc[203:]
 print(df.columns)
 print(df_use)

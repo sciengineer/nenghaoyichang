@@ -11,7 +11,7 @@ CORS(app)
 
 @app.route("/tiansu/api/v1.0/power_consumption/call_mysql_one_hour/<int:id>/", methods=['GET', 'POST'])
 def get_mysql_data_one_hour(id):
-    BASE_URL = 'http://192.168.71.178:3001'
+    BASE_URL = 'http://192.168.70.241:3001'
     response = requests.get(urljoin(BASE_URL, "/tiansu/api/v1.0/power_consumption/mysql_one_hour/%d/" % id))
     print('response:', response)
     one_hour_data = response.text

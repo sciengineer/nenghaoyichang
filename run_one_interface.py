@@ -8,14 +8,14 @@ import multiprocessing
 
 # 调用获取mysql数据的接口的接口call_mysql_one_hour
 def get_data_call_mysql_one_hour(floor_id):
-    BASE_URL = 'http://192.168.71.178:3002'
+    BASE_URL = 'http://192.168.70.241:3002'
     init_data = requests.get(urljoin(BASE_URL, "/tiansu/api/v1.0/power_consumption/call_mysql_one_hour/%d/" % floor_id))
     return init_data
 
 
 # 将每个小时的能耗数据传参到算法程序中
 def post_one_hour_data(floor_id):
-    BASE_URL = 'http://192.168.71.178:3003'
+    BASE_URL = 'http://192.168.70.241:3003'
     one_hour_data = get_data_call_mysql_one_hour(floor_id).text
     print('init_data:', one_hour_data)
     post_one_hour_data = {"power_consumption": one_hour_data}
